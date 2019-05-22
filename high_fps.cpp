@@ -125,7 +125,7 @@ int main()
 		UMat result_mat;
 
 		//cout << "H = " << H << endl;
-
+		//cv::cuda::warpPerspective(temp1, result, H, cv::Size(projectedCorners[2].x, temp1.rows));
 		cv::cuda::warpPerspective(temp1, result, H, cv::Size(1350, temp1.rows));
 		GpuMat half(result, cv::Rect(0, 0, temp2.cols, temp2.rows));
 		temp2.copyTo(half);
