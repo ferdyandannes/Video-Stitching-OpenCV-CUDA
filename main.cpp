@@ -26,10 +26,19 @@ using namespace cv::cuda;
  
 int main( int argc, char** argv ) {
   
-  VideoCapture cap_1("seq2.mp4");
-  VideoCapture cap_2("seq1.mp4");
+  VideoCapture cap_1("right.mp4");
+  VideoCapture cap_2("left.mp4");
 
   cv::cuda::printCudaDeviceInfo(0);
+
+  int width = cap_1.get(CV_CAP_PROP_FRAME_WIDTH);
+  int height = cap_1.get(CV_CAP_PROP_FRAME_HEIGHT);
+
+  int x1 = width / 4;
+  int x2 = width - x1;
+
+  Rect Rec2(x1, 0, x2, height);
+  Rect Rec1(x1, 0, x2, height);
 
   time_t start, end;
   double fps;
@@ -38,6 +47,7 @@ int main( int argc, char** argv ) {
 
   time(&start);
   
+  int hit = 0;
 
   for (;;)
   {
@@ -50,15 +60,33 @@ int main( int argc, char** argv ) {
     cv::cuda::GpuMat temp1, temp2;
 
     // Convert into the GPU Mat
-    src2.upload(seq_2);
-    src1.upload(seq_1);
     temp2.upload(seq_2);
     temp1.upload(seq_1);
+
+    // USING ROI
+    /*UMat Roi2 = seq_2(Rec2);
+    UMat Roi1 = seq_1(Rec1);
+    src2.upload(Roi2);
+    src1.upload(Roi1);
+    temp2.upload(seq_2);
+    temp1.upload(seq_1);*/
+
+    // NO ROI
+    src2.upload(seq_2);
+    src1.upload(seq_1);
 
 
 
     cv::cuda::cvtColor(src2, src2, COLOR_BGR2GRAY);
     cv::cuda::cvtColor(src1, src1, COLOR_BGR2GRAY);
+
+    // CHECK ROI
+    /*UMat a, b;
+    src2.download(a);
+    imshow("Result a", a);
+    src1.download(b);
+    imshow("Result b", b);*/
+
 
     SURF_CUDA detector(100);
     GpuMat keypoints1GPU, keypoints2GPU;
@@ -133,10 +161,14 @@ int main( int argc, char** argv ) {
     ++counter;
     sec = difftime(end, start);
     fps = counter / sec;
-    cout << "Fps = " << fps << endl;
+    cout << "Frame " << hit <<"     Fps = " << fps << endl;
 
+    hit++;
 
     if ((char)waitKey(33) >= 0) break;
+
+    //detector.releaseMemory();
+    //matcher.release();
   }
   
   cap_1.release();
