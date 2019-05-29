@@ -18,6 +18,7 @@
 #include <vector>
 #include <string>
 #include <time.h>
+#include <ctime>
 
 using namespace cv;
 using namespace std;
@@ -28,6 +29,9 @@ int main( int argc, char** argv ) {
   
   VideoCapture cap_1("right.mp4");
   VideoCapture cap_2("left.mp4");
+
+  //VideoCapture cap_1("seq86_2.mp4");
+  //VideoCapture cap_2("seq86_1.mp4");
 
   cv::cuda::printCudaDeviceInfo(0);
 
@@ -40,13 +44,22 @@ int main( int argc, char** argv ) {
   Rect Rec2(x1, 0, x2, height);
   Rect Rec1(x1, 0, x2, height);
 
+
+  // V1
   time_t start, end;
   double fps;
   int counter = 0;
   double sec;
-
   time(&start);
   
+
+  // V2
+  long frameCounter = 0;
+
+  std::time_t timeBegin = std::time(0);
+  int tick = 0;
+
+
   int hit = 0;
 
   for (;;)
@@ -88,7 +101,7 @@ int main( int argc, char** argv ) {
     imshow("Result b", b);*/
 
 
-    SURF_CUDA detector(100);
+    SURF_CUDA detector(2000);
     GpuMat keypoints1GPU, keypoints2GPU;
     GpuMat descriptors1GPU, descriptors2GPU;
     vector<KeyPoint> keypoints_tmp_CPU1, keypoints_tmp_CPU2;
@@ -109,7 +122,7 @@ int main( int argc, char** argv ) {
     std::vector< DMatch > good_matches;
     for (int k = 0; k < std::min(keypoints_object.size() - 1, matches.size()); k++)
     {
-      if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) &&
+      if ((matches[k][0].distance < 0.75*(matches[k][1].distance)) &&
         ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
       {
         // take the first result only if its distance is smaller than 0.6*second_best_dist
@@ -157,11 +170,31 @@ int main( int argc, char** argv ) {
     result.download(result_mat);
     imshow("Result Image", result_mat);
 
-    time(&end);
+    /*time(&end);
     ++counter;
     sec = difftime(end, start);
     fps = counter / sec;
-    cout << "Frame " << hit <<"     Fps = " << fps << endl;
+    cout << "Frame " << hit <<"     Fps = " << fps << endl; */
+
+
+
+
+    frameCounter++;
+
+    std::time_t timeNow = std::time(0) - timeBegin;
+
+    if (timeNow - tick >= 1)
+    {
+        tick++;
+        cout << "Frame = " << hit << "  Frames per second: " << frameCounter << endl;
+        frameCounter = 0;
+    }
+
+
+
+
+
+
 
     hit++;
 
