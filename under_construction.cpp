@@ -27,42 +27,35 @@ using namespace cv::cuda;
  
 int main( int argc, char** argv ) {
   
-  //VideoCapture cap_1("right.mp4");
-  //VideoCapture cap_2("left.mp4");
+  /*VideoCapture cap_1("right.mp4");
+  VideoCapture cap_2("left.mp4");*/
 
   VideoCapture cap_1("seq86_2.mp4");
   VideoCapture cap_2("seq86_1.mp4");
 
   cv::cuda::printCudaDeviceInfo(0);
 
+  // DECLARE ROI
   int width = cap_1.get(CV_CAP_PROP_FRAME_WIDTH);
   int height = cap_1.get(CV_CAP_PROP_FRAME_HEIGHT);
-
   int x1 = width / 4;
   int x2 = width - x1;
-
   Rect Rec2(x1, 0, x2, height);
   Rect Rec1(x1, 0, x2, height);
 
-
-  // V1
-  time_t start, end;
-  double fps;
-  int counter = 0;
-  double sec;
-  time(&start);
-  
-
-  // V2
+  // FOR MEASURE THE FPS
   long frameCounter = 0;
-
   std::time_t timeBegin = std::time(0);
   int tick = 0;
-
-
   int hit = 0;
 
-  cout << "aaaa" << endl;
+  // DECLARE SOME VARIABLE IN HERE
+  Ptr<cuda::ORB> orb = cuda::ORB::create(9000);
+  GpuMat keypoints1GPU, keypoints2GPU;
+  GpuMat descriptors1GPU, descriptors2GPU;
+  vector< KeyPoint > keypoints_scene, keypoints_object;
+  Ptr< cuda::DescriptorMatcher > matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING);
+  vector< vector< DMatch> > matches;
 
   for (;;)
   {
@@ -90,44 +83,26 @@ int main( int argc, char** argv ) {
     src2.upload(seq_2);
     src1.upload(seq_1);
 
-
-
     cv::cuda::cvtColor(src2, src2, COLOR_BGR2GRAY);
     cv::cuda::cvtColor(src1, src1, COLOR_BGR2GRAY);
 
     // CHECK ROI
-    /*UMat a, b;
+   /* UMat a, b;
     src2.download(a);
     imshow("Result a", a);
     src1.download(b);
     imshow("Result b", b);*/
 
+    orb->detectAndComputeAsync(src1, noArray(), keypoints1GPU, descriptors1GPU, false);
+    orb->detectAndComputeAsync(src2, noArray(), keypoints2GPU, descriptors2GPU, false);
+    orb->convert(keypoints1GPU, keypoints_object);
+    orb->convert(keypoints2GPU, keypoints_scene);
 
-    // ############################################################
+    cout << "KPTS = " << keypoints_scene.size() << endl;
 
-    SURF_CUDA detector(2000);
-    GpuMat keypoints1GPU, keypoints2GPU;
-    GpuMat descriptors1GPU, descriptors2GPU;
-    detector(src1, GpuMat(), keypoints1GPU, descriptors1GPU);
-    detector(src2, GpuMat(), keypoints2GPU, descriptors2GPU);
-
-    Ptr< cuda::DescriptorMatcher > matcher = cuda::DescriptorMatcher::createBFMatcher();
-    vector< vector< DMatch> > matches;
     matcher->knnMatch(descriptors1GPU, descriptors2GPU, matches, 2);
 
-    vector< KeyPoint > keypoints_scene, keypoints_object;
-    detector.downloadKeypoints(keypoints2GPU, keypoints_scene);
-    detector.downloadKeypoints(keypoints1GPU, keypoints_object);
-
     std::vector< DMatch > good_matches;
-    /*for (int k = 0; k < std::min(keypoints_object.size() - 1, matches.size()); k++)
-    {
-      if ((matches[k][0].distance < 0.75*(matches[k][1].distance)) &&
-        ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
-      {
-        good_matches.push_back(matches[k][0]);
-      }
-    }*/
 
     for (int z = 0; z < std::min(keypoints_object.size() - 1, matches.size()); z++)
     {
@@ -145,92 +120,21 @@ int main( int argc, char** argv ) {
       scene.push_back(keypoints_scene[good_matches[y].trainIdx].pt);
     }
 
+    cout << "Match points = " << good_matches.size() << endl;
+
     Mat H = findHomography(obj, scene, RANSAC);
-
-    ///////////////////////////////////////////////////
-    std::vector<Point2f> imageCorners(4);
-    imageCorners[0] = cvPoint(0, 0);
-    imageCorners[1] = cvPoint(seq_1.cols, 0);
-    imageCorners[2] = cvPoint(seq_1.cols, seq_1.rows);
-    imageCorners[3] = cvPoint(0, seq_1.rows);
-    std::vector<Point2f> projectedCorners(4);
-
-    perspectiveTransform(imageCorners, projectedCorners, H);
-    //cout << "4 = " << round(projectedCorners[2].x) << endl;
-    ///////////////////////////////////////////////////
     
     GpuMat result, H_gpu;
     H_gpu.upload(H);
     UMat result_mat;
 
-    //cout << "H = " << H << endl;
-    //cv::cuda::warpPerspective(temp1, result, H, cv::Size(projectedCorners[2].x, temp1.rows));
-    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1350, temp1.rows));
-    //GpuMat half(result, cv::Rect(0, 0, temp2.cols, temp2.rows));
-    //temp2.copyTo(half);
-
-    result.download(result_mat);
-    imshow("Result Image", result_mat);
-
-    
-    // ############################################################
-
-    //Ptr<cuda::ORB> orb = cuda::ORB::create(500, 1.2f, 8, 31, 0, 2, 0, 31, 20, true);
-    /*Ptr<cuda::ORB> orb = cuda::ORB::create(5000);
-
-    GpuMat keypoints1GPU, keypoints2GPU;
-    GpuMat descriptors1GPU, descriptors2GPU;
-    vector< KeyPoint > keypoints_scene, keypoints_object;
-
-    orb->detectAndComputeAsync(src1, noArray(), keypoints1GPU, descriptors1GPU, false);
-    orb->detectAndComputeAsync(src2, noArray(), keypoints2GPU, descriptors2GPU, false);
-    orb->convert(keypoints1GPU, keypoints_object);
-    orb->convert(keypoints2GPU, keypoints_scene);
-
-    cout << "KPTS = " << keypoints_scene.size() << endl;
-
-    Ptr< cuda::DescriptorMatcher > matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING);
-    vector< vector< DMatch> > matches;
-    matcher->knnMatch(descriptors1GPU, descriptors2GPU, matches, 2);
-
-    std::vector< DMatch > good_matches;
-    for (int k = 0; k < std::min(keypoints_object.size() - 1, matches.size()); k++)
-    {
-      if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
-      {
-        good_matches.push_back(matches[k][0]);
-      }
-    }
-
-    std::vector<Point2f> obj;
-    std::vector<Point2f> scene;
-
-    for (int i = 0; i < good_matches.size(); i++)
-    {
-      obj.push_back(keypoints_object[good_matches[i].queryIdx].pt);
-      scene.push_back(keypoints_scene[good_matches[i].trainIdx].pt);
-    }
-
-    Mat H = findHomography(obj, scene, RANSAC);*/
-
-    /*std::vector<Point2f> imageCorners(4);
-    imageCorners[0] = cvPoint(0, 0);
-    imageCorners[1] = cvPoint(seq_1.cols, 0);
-    imageCorners[2] = cvPoint(seq_1.cols, seq_1.rows);
-    imageCorners[3] = cvPoint(0, seq_1.rows);
-    std::vector<Point2f> projectedCorners(4);
-    perspectiveTransform(imageCorners, projectedCorners, H);*/
-
-    /*GpuMat result, H_gpu;
-    H_gpu.upload(H);
-    UMat result_mat;
-
-    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1350, temp1.rows));
+    // cv::cuda::warpPerspective(temp1, result, H, cv::Size(temp2.cols + temp1.cols, temp2.rows));
+    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1400, temp2.rows));
     GpuMat half(result, cv::Rect(0, 0, temp2.cols, temp2.rows));
     temp2.copyTo(half);
 
     result.download(result_mat);
-    imshow("Result Image", result_mat);*/
+    imshow("Result Image", result_mat);
 
     // ############################################################
 
@@ -238,22 +142,22 @@ int main( int argc, char** argv ) {
     imshow("kpt", hasil);*/
 
     frameCounter++;
-
+    hit++;
     std::time_t timeNow = std::time(0) - timeBegin;
-
     if (timeNow - tick >= 1)
     {
         tick++;
-        cout << "Frame = " << hit << "  Frames per second: " << frameCounter << endl;
+        cout << "Frame = " << hit << "  Frames per second: " << frameCounter << endl << endl;
         frameCounter = 0;
     }
 
-    hit++;
-
+    //waitKey(0);
     if ((char)waitKey(33) >= 0) break;
 
-    //detector.releaseMemory();
+    //orb.releaseMemory();
     //matcher.release();
+    keypoints_object.clear();
+    keypoints_scene.clear();
   }
   
   cap_1.release();
