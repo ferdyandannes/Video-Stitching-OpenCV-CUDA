@@ -24,43 +24,48 @@ using namespace cv;
 using namespace std;
 using namespace cv::xfeatures2d;
 using namespace cv::cuda;
+
  
 int main( int argc, char** argv ) {
   
-  VideoCapture cap_1("right.mp4");
-  VideoCapture cap_2("left.mp4");
+  /*VideoCapture cap_1("right.mp4");
+  VideoCapture cap_2("left.mp4");*/
 
-  //VideoCapture cap_1("seq86_2.mp4");
-  //VideoCapture cap_2("seq86_1.mp4");
+  /*VideoCapture cap_1("seq86_2.mp4");
+  VideoCapture cap_2("seq86_1.mp4");*/
+
+  VideoCapture cap_1("wb1.mp4");
+  VideoCapture cap_2("wb2.mp4");
 
   cv::cuda::printCudaDeviceInfo(0);
 
+  detail::MultiBandBlender blender(false, 5);
+
+  // DECLARE ROI
   int width = cap_1.get(CV_CAP_PROP_FRAME_WIDTH);
   int height = cap_1.get(CV_CAP_PROP_FRAME_HEIGHT);
-
   int x1 = width / 4;
   int x2 = width - x1;
-
   Rect Rec2(x1, 0, x2, height);
   Rect Rec1(x1, 0, x2, height);
 
-
-  // V1
-  time_t start, end;
-  double fps;
-  int counter = 0;
-  double sec;
-  time(&start);
-  
-
-  // V2
+  // FOR MEASURE THE FPS
   long frameCounter = 0;
-
   std::time_t timeBegin = std::time(0);
   int tick = 0;
-
-
   int hit = 0;
+
+  // DECLARE SOME VARIABLE IN HERE
+  Ptr<cuda::ORB> orb = cuda::ORB::create(9000);
+  GpuMat keypoints1GPU, keypoints2GPU;
+  GpuMat descriptors1GPU, descriptors2GPU;
+  vector< KeyPoint > keypoints_scene, keypoints_object;
+  Ptr< cuda::DescriptorMatcher > matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING);
+  vector< vector< DMatch> > matches;
+
+  // FOR BLENDING
+  double alpha = 0.5; 
+  double beta = 0;
 
   for (;;)
   {
@@ -88,120 +93,111 @@ int main( int argc, char** argv ) {
     src2.upload(seq_2);
     src1.upload(seq_1);
 
-
-
     cv::cuda::cvtColor(src2, src2, COLOR_BGR2GRAY);
     cv::cuda::cvtColor(src1, src1, COLOR_BGR2GRAY);
 
     // CHECK ROI
-    /*UMat a, b;
+   /* UMat a, b;
     src2.download(a);
     imshow("Result a", a);
     src1.download(b);
     imshow("Result b", b);*/
 
+    orb->detectAndComputeAsync(src1, noArray(), keypoints1GPU, descriptors1GPU, false);
+    orb->detectAndComputeAsync(src2, noArray(), keypoints2GPU, descriptors2GPU, false);
+    orb->convert(keypoints1GPU, keypoints_object);
+    orb->convert(keypoints2GPU, keypoints_scene);
 
-    SURF_CUDA detector(2000);
-    GpuMat keypoints1GPU, keypoints2GPU;
-    GpuMat descriptors1GPU, descriptors2GPU;
-    vector<KeyPoint> keypoints_tmp_CPU1, keypoints_tmp_CPU2;
-    detector(src1, GpuMat(), keypoints1GPU, descriptors1GPU);
-    detector(src2, GpuMat(), keypoints2GPU, descriptors2GPU);
+    //cout << "KPTS = " << keypoints_scene.size() << endl;
 
-    detector.downloadKeypoints(keypoints1GPU, keypoints_tmp_CPU1);
-    detector.downloadKeypoints(keypoints2GPU, keypoints_tmp_CPU2);
-
-    Ptr< cuda::DescriptorMatcher > matcher = cuda::DescriptorMatcher::createBFMatcher();
-    vector< vector< DMatch> > matches;
     matcher->knnMatch(descriptors1GPU, descriptors2GPU, matches, 2);
 
-    vector< KeyPoint > keypoints_scene, keypoints_object;
-    detector.downloadKeypoints(keypoints2GPU, keypoints_scene);
-    detector.downloadKeypoints(keypoints1GPU, keypoints_object);
-
     std::vector< DMatch > good_matches;
-    for (int k = 0; k < std::min(keypoints_object.size() - 1, matches.size()); k++)
+
+    for (int z = 0; z < std::min(keypoints_object.size() - 1, matches.size()); z++)
     {
-      if ((matches[k][0].distance < 0.75*(matches[k][1].distance)) &&
-        ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+      if (matches[z][0].distance < 0.75*(matches[z][1].distance))
       {
-        // take the first result only if its distance is smaller than 0.6*second_best_dist
-        // that means this descriptor is ignored if the second distance is bigger or of similar
-        good_matches.push_back(matches[k][0]);
+        good_matches.push_back(matches[z][0]);
       }
     }
 
-    //-- Localize the object
     std::vector<Point2f> obj;
     std::vector<Point2f> scene;
-
-    for (int i = 0; i < good_matches.size(); i++)
+    for (int y = 0; y < good_matches.size(); y++)
     {
-      //-- Get the keypoints from the good matches
-      obj.push_back(keypoints_object[good_matches[i].queryIdx].pt);
-      scene.push_back(keypoints_scene[good_matches[i].trainIdx].pt);
+      obj.push_back(keypoints_object[good_matches[y].queryIdx].pt);
+      scene.push_back(keypoints_scene[good_matches[y].trainIdx].pt);
     }
 
+    cout << "Match points = " << good_matches.size() << endl;
 
     Mat H = findHomography(obj, scene, RANSAC);
-
-    ///////////////////////////////////////////////////
-    std::vector<Point2f> imageCorners(4);
-    imageCorners[0] = cvPoint(0, 0);
-    imageCorners[1] = cvPoint(seq_1.cols, 0);
-    imageCorners[2] = cvPoint(seq_1.cols, seq_1.rows);
-    imageCorners[3] = cvPoint(0, seq_1.rows);
-    std::vector<Point2f> projectedCorners(4);
-
-    perspectiveTransform(imageCorners, projectedCorners, H);
-    //cout << "4 = " << round(projectedCorners[2].x) << endl;
-    ///////////////////////////////////////////////////
     
-    GpuMat result, H_gpu;
+    GpuMat result, H_gpu, store;
     H_gpu.upload(H);
-    UMat result_mat;
+    UMat result_mat, cek_mat, dst;
 
-    //cout << "H = " << H << endl;
-    //cv::cuda::warpPerspective(temp1, result, H, cv::Size(projectedCorners[2].x, temp1.rows));
-    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1350, temp1.rows));
+    // cv::cuda::warpPerspective(temp1, result, H, cv::Size(temp2.cols + temp1.cols, temp2.rows));
+    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1400, temp2.rows));
+    result.copyTo(store);
     GpuMat half(result, cv::Rect(0, 0, temp2.cols, temp2.rows));
     temp2.copyTo(half);
 
     result.download(result_mat);
+
     imshow("Result Image", result_mat);
 
-    /*time(&end);
-    ++counter;
-    sec = difftime(end, start);
-    fps = counter / sec;
-    cout << "Frame " << hit <<"     Fps = " << fps << endl; */
+    // ALPHA BLEND ###################################################
+    // ROI
+    /*store.download(result_mat);
+    temp2.download(cek_mat);
+    int min_x = ( result_mat.cols - cek_mat.cols)/2;
+    int min_y = ( result_mat.rows - cek_mat.rows)/2;
+
+    cout << min_x << " " << min_y << endl;
+
+    Rect roi(min_x, min_y, cek_mat.cols, cek_mat.rows);
+    UMat out_image = result_mat.clone();
+    UMat A_roi = result_mat(roi);
+    UMat out_image_roi = out_image(roi);
+    cv::addWeighted(A_roi, alpha, cek_mat, 1 - alpha, 0.0, out_image_roi);*/
+
+    //beta = (1.0 - alpha);
+    //cv::addWeighted(result_mat, alpha, cek_mat, beta, 0.0, dst);
+
+    //alphaBlend(result_mat, cek_mat, alpha, dst);
+
+    //imshow("Result Image", result_mat);
+    //imshow("Result Image2", cek_mat);
+    //imshow("Resultssss ssImage", out_image_roi);
+    // ##############################################################
 
 
 
+
+
+
+    /*drawKeypoints(seq_2, keypoints_scene, hasil);
+    imshow("kpt", hasil);*/
 
     frameCounter++;
-
+    hit++;
     std::time_t timeNow = std::time(0) - timeBegin;
-
     if (timeNow - tick >= 1)
     {
         tick++;
-        cout << "Frame = " << hit << "  Frames per second: " << frameCounter << endl;
+        cout << "Frame = " << hit << "  Frames per second: " << frameCounter << endl << endl;
         frameCounter = 0;
     }
 
-
-
-
-
-
-
-    hit++;
-
+    //waitKey(0);
     if ((char)waitKey(33) >= 0) break;
 
-    //detector.releaseMemory();
+    //orb.releaseMemory();
     //matcher.release();
+    keypoints_object.clear();
+    keypoints_scene.clear();
   }
   
   cap_1.release();
