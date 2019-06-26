@@ -130,7 +130,7 @@ int main( int argc, char** argv ) {
       scene.push_back(keypoints_scene[good_matches[y].trainIdx].pt);
     }
 
-    cout << "Match points = " << good_matches.size() << endl;
+    //cout << "Match points = " << good_matches.size() << endl;
 
     Mat H = findHomography(obj, scene, RANSAC);
     
@@ -139,12 +139,15 @@ int main( int argc, char** argv ) {
     UMat result_mat, cek_mat, dst;
 
     // cv::cuda::warpPerspective(temp1, result, H, cv::Size(temp2.cols + temp1.cols, temp2.rows));
-    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1400, temp2.rows));
-    result.copyTo(store);
+    //cv::cuda::warpPerspective(temp1, result, H, cv::Size(1400, temp2.rows));
+    cv::cuda::warpPerspective(temp1, result, H, cv::Size(2000, temp2.rows));
+    //result.copyTo(store);
     GpuMat half(result, cv::Rect(0, 0, temp2.cols, temp2.rows));
     temp2.copyTo(half);
 
     result.download(result_mat);
+
+    //cout << result_mat.size() << endl;
 
     imshow("Result Image", result_mat);
 
@@ -191,15 +194,17 @@ int main( int argc, char** argv ) {
         frameCounter = 0;
     }
 
+    //cout << "Counter = " << hit << endl;
+    imwrite("a.jpg", result_mat);
+
     //waitKey(0);
     if ((char)waitKey(33) >= 0) break;
-
-    //orb.releaseMemory();
-    //matcher.release();
+   
     keypoints_object.clear();
     keypoints_scene.clear();
   }
-  
+  matcher.release();
+  //orb.releaseMemory();
   cap_1.release();
   cap_2.release();
   return 0;
