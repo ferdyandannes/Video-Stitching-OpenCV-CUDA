@@ -31,11 +31,11 @@ int main( int argc, char** argv ) {
   /*VideoCapture cap_1("right.mp4");
   VideoCapture cap_2("left.mp4");*/
 
-  /*VideoCapture cap_1("seq86_2.mp4");
-  VideoCapture cap_2("seq86_1.mp4");*/
+  VideoCapture cap_1("seq86_2.mp4");
+  VideoCapture cap_2("seq86_1.mp4");
 
-  VideoCapture cap_1("wb1.mp4");
-  VideoCapture cap_2("wb2.mp4");
+  /*VideoCapture cap_1("wb1.mp4");
+  VideoCapture cap_2("wb2.mp4");*/
 
   cv::cuda::printCudaDeviceInfo(0);
 
@@ -140,7 +140,7 @@ int main( int argc, char** argv ) {
 
     // cv::cuda::warpPerspective(temp1, result, H, cv::Size(temp2.cols + temp1.cols, temp2.rows));
     //cv::cuda::warpPerspective(temp1, result, H, cv::Size(1400, temp2.rows));
-    cv::cuda::warpPerspective(temp1, result, H, cv::Size(2000, temp2.rows));
+    cv::cuda::warpPerspective(temp1, result, H, cv::Size(1400, temp2.rows));
     //result.copyTo(store);
     GpuMat half(result, cv::Rect(0, 0, temp2.cols, temp2.rows));
     temp2.copyTo(half);
@@ -195,7 +195,7 @@ int main( int argc, char** argv ) {
     }
 
     //cout << "Counter = " << hit << endl;
-    imwrite("a.jpg", result_mat);
+    //imwrite("a.jpg", result_mat);
 
     //waitKey(0);
     if ((char)waitKey(33) >= 0) break;
